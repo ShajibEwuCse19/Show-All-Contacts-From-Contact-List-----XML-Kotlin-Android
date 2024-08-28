@@ -85,7 +85,7 @@ class MainActivity : AppCompatActivity() {
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         if (requestCode == REQUEST_CODE_CONTACT && resultCode == RESULT_OK) {
             // Get the selected contact
-            getContact(data?.data)
+            getContact()
         } else {
             Toast.makeText(this, "No Contact Selected", Toast.LENGTH_SHORT).show()
             super.onActivityResult(requestCode, resultCode, data)
@@ -94,7 +94,7 @@ class MainActivity : AppCompatActivity() {
 
     // Get the selected contact [step-6]
     @SuppressLint("Range")
-    private fun getContact(uri: Uri?) {
+    private fun getContact() {
         val contentResolver = contentResolver
         val contactUri = ContactsContract.Contacts.CONTENT_URI
         val contactCursor = contentResolver.query(contactUri, null, null, null, null)
@@ -102,7 +102,8 @@ class MainActivity : AppCompatActivity() {
         if (contactCursor != null && contactCursor.moveToFirst()) {
             do {
                 // Get the contact id
-                val contactId = contactCursor.getString(contactCursor.getColumnIndex(ContactsContract.Contacts._ID))
+                val contactId =
+                    contactCursor.getString(contactCursor.getColumnIndex(ContactsContract.Contacts._ID))
 
                 // Use the contact id to get the contact's phone numbers
                 val numberCursor = contentResolver.query(
