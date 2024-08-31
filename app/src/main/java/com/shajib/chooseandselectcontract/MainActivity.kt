@@ -12,7 +12,9 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.recyclerview.widget.LinearLayoutManager
+import androidx.recyclerview.widget.RecyclerView
 import com.shajib.chooseandselectcontract.databinding.ActivityMainBinding
+import java.util.Objects
 
 class MainActivity : AppCompatActivity() {
     private lateinit var binding: ActivityMainBinding
@@ -20,6 +22,11 @@ class MainActivity : AppCompatActivity() {
     private val REQUEST_CODE_CONTACT = 2
     private lateinit var contactInformationAdapter: ContactInformationAdapter
     private var myContactList = ArrayList<Pair<String, String>>()
+
+    private var isLoading = false
+    private var PAGE_SIZE = 20
+    private var currentPage = 0
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         binding = ActivityMainBinding.inflate(layoutInflater)
@@ -34,17 +41,90 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun initRecyclerView() {
-        contactInformationAdapter = ContactInformationAdapter(
-            contactList = myContactList
-        )
+        contactInformationAdapter = ContactInformationAdapter(myContactList)
 
         binding.rvContact.apply {
             layoutManager = LinearLayoutManager(this@MainActivity)
             adapter = contactInformationAdapter
             setHasFixedSize(true)
+
+            addOnScrollListener(object : RecyclerView.OnScrollListener() {
+                override fun onScrolled(recyclerView: RecyclerView, dx: Int, dy: Int) {
+                    super.onScrolled(recyclerView, dx, dy)
+
+                    val layoutManager = recyclerView.layoutManager as LinearLayoutManager
+                    val totalItemCount = layoutManager.itemCount
+                    val lastVisibleItem = layoutManager.findLastVisibleItemPosition()
+
+                    if(!isLoading && totalItemCount <= lastVisibleItem + 5) {
+                        loadMoreContacts()
+                    }
+                }
+            })
         }
-        contactInformationAdapter.notifyDataSetChanged()
+        //contactInformationAdapter.notifyDataSetChanged()
+        loadMoreContacts()
     }
+
+    private fun loadMoreContacts() {
+        isLoading = true
+
+        Thread {
+            val newContact = getPaginatedContacts(currentPage)
+            runOnUiThread {
+                contactInformationAdapter.addContacts(newContact)
+                isLoading = false
+                currentPage++
+            }
+        }.start()
+    }
+
+    // Get paginated contacts [step-6]
+    @SuppressLint("Range")
+    private fun getPaginatedContacts(page: Int): List<Pair<String, String>> {
+        val contentResolver = contentResolver
+        val contactUri = ContactsContract.Contacts.CONTENT_URI
+        val offset = page * PAGE_SIZE
+
+        val contactCursor = contentResolver.query(
+            contactUri,
+            null,
+            null,
+            null,
+            "${ContactsContract.Contacts._ID} LIMIT $PAGE_SIZE OFFSET $offset"
+        )
+
+        if (contactCursor != null && contactCursor.moveToFirst()) {
+            do {
+                val contactId = contactCursor.getString(contactCursor.getColumnIndex(ContactsContract.Contacts._ID))
+                val numberCursor = contentResolver.query(
+                    ContactsContract.CommonDataKinds.Phone.CONTENT_URI,
+                    null,
+                    ContactsContract.CommonDataKinds.Phone.CONTACT_ID + "=?",
+                    arrayOf(contactId),
+                    null
+                )
+
+                if (numberCursor != null && numberCursor.moveToFirst()) {
+                    do {
+                        val name = numberCursor.getString(
+                            numberCursor.getColumnIndex(ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME)
+                        )
+                        val number = numberCursor.getString(
+                            numberCursor.getColumnIndex(ContactsContract.CommonDataKinds.Phone.NUMBER)
+                        )
+                        myContactList.add(Pair(first = name, second = number))
+                    } while (numberCursor.moveToNext())
+                }
+                numberCursor?.close()
+
+            } while (contactCursor.moveToNext())
+        }
+        contactCursor?.close()
+
+        return myContactList
+    }
+
 
     // Check for permission to access contacts [step-2]
     private fun checkContactPermission() {
@@ -84,55 +164,11 @@ class MainActivity : AppCompatActivity() {
     // Handle the result of the contact picker activity [step-5]
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         if (requestCode == REQUEST_CODE_CONTACT && resultCode == RESULT_OK) {
-            // Get the selected contact
-            getContact()
+            loadMoreContacts()
         } else {
             Toast.makeText(this, "No Contact Selected", Toast.LENGTH_SHORT).show()
             super.onActivityResult(requestCode, resultCode, data)
         }
-    }
-
-    // Get the selected contact [step-6]
-    @SuppressLint("Range")
-    private fun getContact() {
-        val contentResolver = contentResolver
-        val contactUri = ContactsContract.Contacts.CONTENT_URI
-        val contactCursor = contentResolver.query(contactUri, null, null, null, null)
-
-        if (contactCursor != null && contactCursor.moveToFirst()) {
-            do {
-                // Get the contact id
-                val contactId =
-                    contactCursor.getString(contactCursor.getColumnIndex(ContactsContract.Contacts._ID))
-
-                // Use the contact id to get the contact's phone numbers
-                val numberCursor = contentResolver.query(
-                    ContactsContract.CommonDataKinds.Phone.CONTENT_URI,
-                    null,
-                    ContactsContract.CommonDataKinds.Phone.CONTACT_ID + "=?",
-                    arrayOf(contactId),
-                    null
-                )
-
-                // Iterate through all the phone numbers for the contact
-                if (numberCursor != null && numberCursor.moveToFirst()) {
-                    do {
-                        val name = numberCursor.getString(
-                            numberCursor.getColumnIndex(ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME)
-                        )
-                        val number = numberCursor.getString(
-                            numberCursor.getColumnIndex(ContactsContract.CommonDataKinds.Phone.NUMBER)
-                        )
-                        myContactList.add(Pair(first = name, second = number))
-                    } while (numberCursor.moveToNext())
-                }
-                numberCursor?.close()
-
-            } while (contactCursor.moveToNext())
-        }
-        contactCursor?.close()
-
-        contactInformationAdapter?.notifyDataSetChanged()
     }
 
     // Launch the contact picker [step-4]

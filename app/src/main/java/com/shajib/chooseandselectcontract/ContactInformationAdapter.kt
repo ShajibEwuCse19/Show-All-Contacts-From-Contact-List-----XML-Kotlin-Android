@@ -37,4 +37,12 @@ class ContactInformationAdapter(private val contactList: ArrayList<Pair<String, 
             binding.tvNumber.text = contactInfo.second
         }
     }
+
+    //add contacts from a single page [pagination]
+    fun addContacts(contacts: List<Pair<String, String>>) {
+        val startPosition = contactList.size
+        contactList.addAll(contacts)
+        val endPosition = contactList.size
+        notifyItemRangeInserted(startPosition, endPosition)
+    }
 }
